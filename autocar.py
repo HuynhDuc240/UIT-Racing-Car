@@ -28,11 +28,28 @@ def jsonToString(speed, angle):
    # print(jsonString)
    return jsonString
 
+
+# def test(img):
+#    image = np.copy(img)
+#    binary_image =  binary_pipeline(image)
+#    bird_view, inverse_perspective_transform = warp_image(binary_image)
+#    left_fit, right_fit = track_lanes_initialize(bird_view)
+#    warp, inverse = warp_image(image)
+#    lane_image = hsv_select(warp)
+#    lane_point = get_point_in_lane(lane_image)
+#    val = 0
+#    if len(left_fit) != 0:
+#       val = lane_point[1] - (left_fit[0]*(lane_point[0]**2)+left_fit[1]*lane_point[0]+left_fit[2])
+#    if len(right_fit) != 0:
+#       val = lane_point[1] - (right_fit[0]*(lane_point[0]**2)+right_fit[1]*lane_point[0]+right_fit[2])
+#    print(val)
+#    cv2.imshow('lane_image',lane_image)
+#    cv2.imshow('bird',bird_view*255)
+#    cv2.waitKey(1)
 ## Processing image
 def Processing_image(img):
    global missing_left_line
    global missing_right_line
-   current_missing_line = [missing_left_line,missing_right_line]
    car_posx = int(img.shape[1]/2)
 	# car_posy = image.shape[0] - int(0.025*image.shape[0])
    car_posy = img.shape[0] - 10
@@ -41,18 +58,21 @@ def Processing_image(img):
    bird_view, inverse_perspective_transform =  warp_image(binary_image)
    left_fit, right_fit = track_lanes_initialize(bird_view)
    # print(left_fit,right_fit)
-   
-   # print(current_missing_line)
-   missing_left_line, missing_right_line = check_missing_line(bird_view, left_fit, right_fit,current_missing_line)
+   warp, inverse = warp_image(image)
+   lane_image = hsv_select(warp)
+   # cv2.imshow('lane_image',lane_image)
+   lane_point = get_point_in_lane(lane_image)
+   # print(lane_point)
+   missing_left_line, missing_right_line = check_missing_line(left_fit, right_fit,lane_point)
    if missing_left_line:
       cv2.imshow('bird', bird_view*255)
       cv2.waitKey(1)
-      return 5, -45
+      return -2, -40
    if missing_right_line:
       cv2.imshow('bird', bird_view*255)
       cv2.waitKey(1)
-      return 5, 45
-   colored_lane, center_line = lane_fill_poly(bird_view, image, left_fit, right_fit,inverse_perspective_transform)
+      return -2, 40
+   colored_lane, center_line = lane_fill_poly(bird_view, image, left_fit, right_fit,inverse_perspective_transform, lane_point)
    # cv2.circle(center_line,(car_posx,car_posy),1,(255,255,0),7)
    # cv2.imshow('binary_image',bird_view*255)
    cv2.imshow("lane",colored_lane)
@@ -102,7 +122,7 @@ class processThread (threading.Thread):
             img = cv2.imread(path)
             # print('speed now is : {0}', rspeed)
             if img is not None:
-               speed, angle = Processing_image(img)
+               speed,angle = Processing_image(img)
                print(speed, angle)
          except Exception as e:
             print(e)

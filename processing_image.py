@@ -26,6 +26,12 @@ def binary_pipeline(img):
     binary =  cv2.bitwise_or(line_shadow,red_binary)
     return binary
 
+
+def hsv_select(img, lower=np.array([10, 0, 0]), upper =np.array([180, 50,150])):
+    hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv_img, lower, upper)
+    return mask
+
 def warp_image(img):
     
     image_size = (img.shape[1], img.shape[0])
@@ -88,7 +94,7 @@ def check_lane_inds(left_lane_inds, right_lane_inds):
 
 def track_lanes_initialize(binary_warped):   
     histogram = np.sum(binary_warped[int(binary_warped.shape[0]/2):,:], axis=0)
-    out_img = np.dstack((binary_warped, binary_warped, binary_warped))*255
+    out_img = np.dstack((binary_warped, binary_warped, binary_warped))
     midpoint = np.int(histogram.shape[0]/2)
     leftx_base = np.argmax(histogram[:midpoint])
     rightx_base = np.argmax(histogram[midpoint:]) + midpoint
@@ -117,7 +123,7 @@ def track_lanes_initialize(binary_warped):
         # Draw the windows on the visualization image
         cv2.rectangle(out_img,(win_xleft_low,win_y_low),(win_xleft_high,win_y_high),(0,255,0), 3) 
         cv2.rectangle(out_img,(win_xright_low,win_y_low),(win_xright_high,win_y_high),(0,255,0), 3) 
-        cv2.imshow('out_img',out_img)
+        # cv2.imshow('out_img',out_img)
         # Identify the nonzero pixels in x and y within the window
         good_left_inds = ((nonzeroy >= win_y_low) & (nonzeroy < win_y_high) & (nonzerox >= win_xleft_low) & (nonzerox < win_xleft_high)).nonzero()[0]
         good_right_inds = ((nonzeroy >= win_y_low) & (nonzeroy < win_y_high) & (nonzerox >= win_xright_low) & (nonzerox < win_xright_high)).nonzero()[0]
@@ -153,53 +159,43 @@ def track_lanes_initialize(binary_warped):
 
 
     return left_fit, right_fit
-def check_missing_line(binary_warped,left_fit, right_fit, current_missing_line):
-    x = binary_warped.shape[1] - 1
-    y = binary_warped.shape[0] - 1
-    # if len(left_fit) == 0 or len(right_fit) == 0:
-    #     if current_missing_line[0]:
-    #         return True, False
-    #     if current_missing_line[1]:
-    #         return False, True
-    if len(left_fit) == 0 and not(current_missing_line[1]):
-        print("line left missing_in_missing_line")
-        return True, False    
-    if len(right_fit) == 0 and not(current_missing_line[0]):
-        print("line right missing_in_missing_line")
-        return False, True
-    if len(left_fit) != 0 and len(right_fit) != 0:
-        
-        if (left_fit == right_fit).all():
-            if current_missing_line[0]:
-                return True, False
-            if current_missing_line[1]:
-                return False,True
-            print("line right or left missing")
-            check_point =  get_val(y,left_fit)
-            if check_point < x/2: # left line avaiable
-                return False, True
-            else:
-                return True, False
+def check_missing_line(left_fit, right_fit, lane_point):
+    if len(left_fit) != 0 and len(right_fit)!=0:
+        return False, False
+    #missing one line
+    if len(left_fit) != 0 and len(right_fit) == 0:
+        val = lane_point[1] - get_val(lane_point[0],left_fit)
+        print(val)
+        if val > 0:
+            print('missing right line')
+            return False,True
+        else:
+            print('missing left line')
+            return True, False
+    if len(right_fit) != 0 and len(left_fit) == 0:
+        val = lane_point[1] - get_val(lane_point[0],right_fit)
+        print(val)
+        if val < 0:
+            print('missing left line')
+            return True, False
+        else:
+            print('missing right line')
+            return False, True
     return False,False
 
-def lane_fill_poly(binary_warped,undist,left_fit,right_fit, inverse_perspective_transform):
+def lane_fill_poly(binary_warped,undist,left_fit,right_fit, inverse_perspective_transform, lane_point):
     ploty = np.linspace(0, binary_warped.shape[0]-1, binary_warped.shape[0])
     x = binary_warped.shape[1] - 1
-    y = binary_warped.shape[0] - 1
-    if len(left_fit) == 0:
-        print("line left missing")
+    if len(left_fit) == 0 and len(right_fit) == 0:
         left_fit = np.array([0,0,1])
-    if len(right_fit) == 0:
-        print("line right missing")
         right_fit = np.array([0,0,x])
-    if len(left_fit) != 0 and len(right_fit) != 0:
-        if (left_fit ==  right_fit).all():
-            print("line right or left missing")
-            check_point =  get_val(y,left_fit)
-            if check_point < x/2+1:
-                right_fit = np.array([0,0,x])
-            else:
-                left_fit = np.array([0,0,1])
+    elif (left_fit == right_fit).all():
+        print("line right or left missing")
+        check_point =  lane_point[1]-get_val(lane_point[0],left_fit)
+        if check_point > 0:
+            right_fit = np.array([0,0,x])
+        else:
+            left_fit = np.array([0,0,1])
     left_fitx = get_val(ploty,left_fit)
     right_fitx = get_val(ploty,right_fit)
     len_center = len(left_fitx)
@@ -228,6 +224,15 @@ def lane_fill_poly(binary_warped,undist,left_fit,right_fit, inverse_perspective_
     result = cv2.addWeighted(undist, 1, newwarp, 0.7, 0.3)
     result = cv2.addWeighted(result,1,center_line,0.7,0.3)
     return result, center_line
+
+def get_point_in_lane(lane_image):
+    histogram = np.sum(lane_image[int(lane_image.shape[0]/2):,:], axis=0)
+    lane_x = np.argmax(histogram)
+    for y in range(lane_image.shape[0]-1,0,-1):
+        if lane_image[y][lane_x] == 255:
+            return [y+30, lane_x]
+    return 0,0
+    
 
 def find_point_center(center_line):
     roi = int(center_line.shape[0]*(7/9))
@@ -265,19 +270,19 @@ def calcul_speed(steer_angle):
     max_angle = 40
     if steer_angle >= 20 or steer_angle <= -20:
         if steer_angle > 0:
-            return 25 - (25/max_angle)*steer_angle
+            return 10 - (10/max_angle)*steer_angle
         else:
-            return 25 + (25/max_angle)*steer_angle
-    elif steer_angle >= 15 or steer_angle <= -15:
-        if steer_angle > 0:
-            return 40 - (40/max_angle)*steer_angle
-        else:
-            return 40 + (30/max_angle)*steer_angle
-    elif steer_angle >= 10 or steer_angle <= -10:
-        if steer_angle > 0:
-            return 50 - (50/max_angle)*steer_angle
-        else:
-            return 50 + (50/max_angle)*steer_angle 
+            return 10 + (10/max_angle)*steer_angle
+    # elif steer_angle >= 15 or steer_angle <= -15:
+    #     if steer_angle > 0:
+    #         return 40 - (40/max_angle)*steer_angle
+    #     else:
+    #         return 40 + (30/max_angle)*steer_angle
+    # elif steer_angle >= 10 or steer_angle <= -10:
+    #     if steer_angle > 0:
+    #         return max_speed - (max_speed/max_angle)*steer_angle
+    #     else:
+    #         return max_speed + (max_speed/max_angle)*steer_angle 
     elif steer_angle >=0:
         return max_speed - (max_speed/max_angle)*steer_angle
 
