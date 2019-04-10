@@ -1,19 +1,19 @@
 import cv2
 import socket
 import sys
-
 import json
 import threading
 import queue
 import numpy as np
 import time
 from processing_image import *
+
 rspeed = 0
 speed = 0
+Max_speed = 100
 angle = 0
 path = 'theFxUITCar_Data/Snapshots/fx_UIT_Car.png'
-missing_left_line = False
-missing_right_line = False
+missing_left_before = -1 # 0 is left, 1 is right
 port = 9999
 ip = str(sys.argv[1])
 
@@ -28,65 +28,23 @@ def jsonToString(speed, angle):
    # print(jsonString)
    return jsonString
 
-
-# def test(img):
-#    image = np.copy(img)
-#    binary_image =  binary_pipeline(image)
-#    bird_view, inverse_perspective_transform = warp_image(binary_image)
-#    left_fit, right_fit = track_lanes_initialize(bird_view)
-#    warp, inverse = warp_image(image)
-#    lane_image = hsv_select(warp)
-#    lane_point = get_point_in_lane(lane_image)
-#    val = 0
-#    if len(left_fit) != 0:
-#       val = lane_point[1] - (left_fit[0]*(lane_point[0]**2)+left_fit[1]*lane_point[0]+left_fit[2])
-#    if len(right_fit) != 0:
-#       val = lane_point[1] - (right_fit[0]*(lane_point[0]**2)+right_fit[1]*lane_point[0]+right_fit[2])
-#    print(val)
-#    cv2.imshow('lane_image',lane_image)
-#    cv2.imshow('bird',bird_view*255)
-#    cv2.waitKey(1)
-## Processing image
-def Processing_image(img):
-   global missing_left_line
-   global missing_right_line
-   car_posx = int(img.shape[1]/2)
-	# car_posy = image.shape[0] - int(0.025*image.shape[0])
-   car_posy = img.shape[0] - 10
-   image = np.copy(img)
-   binary_image =  binary_pipeline(image)
+def processing(image):
+   image_copy = np.copy(image)
+   binary_image =  binary_pipeline(image_copy)
    bird_view, inverse_perspective_transform =  warp_image(binary_image)
    left_fit, right_fit = track_lanes_initialize(bird_view)
-   # print(left_fit,right_fit)
-   warp, inverse = warp_image(image)
-   lane_image = hsv_select(warp)
-   # cv2.imshow('lane_image',lane_image)
-   lane_point = get_point_in_lane(lane_image)
-   # print(lane_point)
-   missing_left_line, missing_right_line = check_missing_line(left_fit, right_fit,lane_point)
-   if missing_left_line:
-      cv2.imshow('bird', bird_view*255)
-      cv2.waitKey(1)
-      return -2, -40
-   if missing_right_line:
-      cv2.imshow('bird', bird_view*255)
-      cv2.waitKey(1)
-      return -2, 40
-   colored_lane, center_line = lane_fill_poly(bird_view, image, left_fit, right_fit,inverse_perspective_transform, lane_point)
-   # cv2.circle(center_line,(car_posx,car_posy),1,(255,255,0),7)
-   # cv2.imshow('binary_image',bird_view*255)
+   left_fit, right_fit = check_fit_duplication(left_fit,right_fit)
+   center_fit, left_fit, right_fit = find_center_line_and_update_fit(image_copy,left_fit,right_fit) # update left, right line
+   colored_lane, center_line = lane_fill_poly(bird_view,image_copy,center_fit,left_fit,right_fit, inverse_perspective_transform)
    cv2.imshow("lane",colored_lane)
-   x,y = find_point_center(center_line)
-   center_point = []
-   center_point.append(y)
-   center_point.append(x)
-   steer_angle = errorAngle(center_point,car_posx,car_posy)/2.5
+   # calculate speed and angle
+   steer_angle =  errorAngle(center_line)
    speed_current = calcul_speed(steer_angle)
    cv2.waitKey(1)
    return int(speed_current), int(steer_angle)
+   
 
 
-## Thread for Socket communication
 class socketThread (threading.Thread):
    def __init__(self, threadID, sock):
       threading.Thread.__init__(self)
@@ -96,12 +54,17 @@ class socketThread (threading.Thread):
       global speed
       global angle
       global rspeed
+      global Max_speed
       while(True):
          try:
             message = jsonToString(speed, angle)
             sock.sendall(message.encode())
             data = sock.recv(100).decode('ascii')
             rspeed = int(data)
+            if rspeed >= 30:
+               Max_speed = 0
+            else:
+               Max_speed = 100
             # print(rspeed)
          except Exception as e:
             print(e)
@@ -122,8 +85,11 @@ class processThread (threading.Thread):
             img = cv2.imread(path)
             # print('speed now is : {0}', rspeed)
             if img is not None:
-               speed,angle = Processing_image(img)
-               print(speed, angle)
+               speed, angle = processing(img)
+               if speed > Max_speed:
+                  speed = Max_speed
+               print(speed, angle,rspeed)
+               
          except Exception as e:
             print(e)
       cv2.destroyAllWindows()
