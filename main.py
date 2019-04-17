@@ -7,7 +7,7 @@ import queue
 import numpy as np
 import time
 from processing_image import *
-
+from detect_traffic_sign import *
 rspeed = 0
 speed = 0
 Max_speed = 100
@@ -29,6 +29,7 @@ def jsonToString(speed, angle):
    return jsonString
 
 def processing(image):
+   #detect line
    image_copy = np.copy(image)
    binary_image =  binary_pipeline(image_copy)
    bird_view, inverse_perspective_transform =  warp_image(binary_image)
@@ -37,6 +38,13 @@ def processing(image):
    center_fit, left_fit, right_fit = find_center_line_and_update_fit(image_copy,left_fit,right_fit) # update left, right line
    colored_lane, center_line = lane_fill_poly(bird_view,image_copy,center_fit,left_fit,right_fit, inverse_perspective_transform)
    cv2.imshow("lane",colored_lane)
+   # detect traffic sign
+   traffic_sign_image = dectect_obj(image)
+   if traffic_sign_image is None:
+      if cv2.getWindowProperty(traffic_sign_image,0) >= 0:
+         cv2.destroyWindow(traffic_sign_image)
+   else:
+      cv2.imshow('traffic_sign_image',traffic_sign_image)
    # calculate speed and angle
    steer_angle =  errorAngle(center_line)
    speed_current = calcul_speed(steer_angle)

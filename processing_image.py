@@ -306,7 +306,7 @@ def errorAngle(center_line):
     return angle
 
 def calcul_speed(steer_angle):
-    max_speed = 99
+    max_speed = 60
     max_angle = 40
     if steer_angle == -45 or steer_angle == 45:
         return 0
