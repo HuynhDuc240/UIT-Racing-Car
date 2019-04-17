@@ -47,14 +47,14 @@ def dectect_obj(image):
     window_width = np.int(roi.shape[1]/nwindows)
     win_y_low = 0
     win_y_high = roi.shape[0]
-    minpix = 1000
+    minpix = 300
     ts_inds = []
     good_window = []
     for window in range(nwindows):
         win_x_low = int(roi.shape[1] - (window+1)*window_width)
         win_x_high = int(roi.shape[1] - window*window_width)
         good_ts_inds = ((nonzeroy >= win_y_low) & (nonzeroy < win_y_high) & (nonzerox >= win_x_low) & (nonzerox < win_x_high)).nonzero()[0]
-        if len(good_ts_inds) > 500:
+        if len(good_ts_inds) > minpix:
             good_window.append(window)
     if len(good_window) == 0:
         return None
