@@ -13,10 +13,13 @@ speed = 0
 Max_speed = 100
 angle = 0
 path = 'theFxUITCar_Data/Snapshots/fx_UIT_Car.png'
-missing_left_before = -1 # 0 is left, 1 is right
 port = 9999
 ip = str(sys.argv[1])
-flag_for_steer = False
+
+# flag for turn left or right
+flag_for_steer = [False,-1] 
+pass_loop_time = 0
+old_status = [0,0]
 ## Function Parse to Json String
 def jsonToString(speed, angle):
    jsonObject = {
@@ -28,34 +31,59 @@ def jsonToString(speed, angle):
    # print(jsonString)
    return jsonString
 
+
 def processing(image):
+   global old_status
+   global pass_loop_time
    global flag_for_steer
-   # detect traffic sign
-   traffic_sign_image = dectect_obj(image)
-   if traffic_sign_image is None:
-      if flag_for_steer:
-         flag_for_steer = False   
+   global Max_speed
+   if flag_for_steer[0]:
+      print("Traffic Sign avaiable")
+      if flag_for_steer[1] == 0 or flag_for_steer[1] == 1:
+         Max_speed = 10
    else:
-      cv2.imshow('traffic_sign_image',traffic_sign_image)
-      predict = predict_obj(traffic_sign_image)
-      print(predict)
-      flag_for_steer = True
-   #detect line
+      Max_speed = 100
+   while pass_loop_time > 0:
+      pass_loop_time -= 1
+      cv2.imshow('lane',image)
+      cv2.waitKey(1)
+      return old_status[0], old_status[1]
    image_copy = np.copy(image)
-   binary_image =  binary_pipeline(image_copy)
-   bird_view, inverse_perspective_transform =  warp_image(binary_image)
-   left_fit, right_fit = track_lanes_initialize(bird_view)
-   left_fit, right_fit = check_fit_duplication(left_fit,right_fit)
-   center_fit, left_fit, right_fit = find_center_line_and_update_fit(image_copy,left_fit,right_fit) # update left, right line
-   colored_lane, center_line = lane_fill_poly(bird_view,image_copy,center_fit,left_fit,right_fit, inverse_perspective_transform)
-   cv2.imshow("lane",colored_lane)
-   # calculate speed and angle
-   steer_angle =  errorAngle(center_line)
-   speed_current = calcul_speed(steer_angle)
+   ##### predic traffic sign avaiable 
+   # 0 is not turn left, 1 is not turn right, 2 is straight, -1 is None
+   predict = traffic_sign_processing(image_copy)
+   if predict == 0: # Turn Right
+      flag_for_steer = [True, 0]
+      old_status = [0, 45]
+   elif predict == 1: # Turn Left
+      flag_for_steer = [True, 1]
+      old_status = [0,-45]
+   elif predict == 2:
+      flag_for_steer = [True, 2]
+      old_status = [70, 0]
+   left_fit, right_fit, bird_view, ipt = line_processing(image_copy)
+   if len(left_fit) == 0 or len(right_fit) == 0: # missing 2 line
+      if flag_for_steer[0]: # before have traffic sign avaiable after that
+         if flag_for_steer[1] == 0:
+            print("Turn RIGHT with traffic sign aviable")
+             ############ change for testing old value[0,45]
+         elif flag_for_steer[1] == 1:
+            print("Turn LEFT  with traffic sign aviable")
+         elif flag_for_steer[1] == 2:
+            print("GO STRAIGHT")
+         flag_for_steer[0] = False
+         print("Traffic Sign unavaiable")
+         pass_loop_time = 70
+         cv2.imshow('lane',image_copy)
+         return old_status[0], old_status[1]
+   center_line = draw_lane(image_copy,bird_view,left_fit,right_fit,ipt)
+   speed_current, steer_angle = get_speed_angle(center_line)
+   ######## bug ####################
+   if steer_angle == 45 or steer_angle == -45:
+      if flag_for_steer[0]: # before have traffic sign avaiable after that
+         return old_status[0], old_status[1]
    cv2.waitKey(1)
    return int(speed_current), int(steer_angle)
-   
-
 
 class socketThread (threading.Thread):
    def __init__(self, threadID, sock):
@@ -73,10 +101,10 @@ class socketThread (threading.Thread):
             sock.sendall(message.encode())
             data = sock.recv(100).decode('ascii')
             rspeed = int(data)
-            if rspeed >= 30:
-               Max_speed = 0
-            else:
-               Max_speed = 100
+            # if rspeed >= 30:
+            #    Max_speed = 0
+            # else:
+            #    Max_speed = 100
             # print(rspeed)
          except Exception as e:
             print(e)

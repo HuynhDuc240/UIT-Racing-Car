@@ -177,7 +177,7 @@ def check_fit_duplication(left_fit, right_fit):
 
 
 def get_point_in_lane(image):
-    warp, inverse = warp_image(image)
+    warp,_ = warp_image(image)
     lane_image = hsv_select(warp)
     lane_shadow = lane_in_shadow(warp)
     lane = cv2.bitwise_or(lane_image,lane_shadow)
@@ -215,8 +215,6 @@ def find_center_line_for_missing_one_line(image,left_fit,right_fit):
     center_fit = np.polyfit(ploty, center_x, 2)
     return center_fit, left_fit, right_fit
 
-    
-
 def find_center_line_and_update_fit(image,left_fit,right_fit):
     if len(left_fit) == 0  and len(right_fit) == 0: # missing 2 line:
         center_fit =  np.array([0,0,image.shape[1]/2])
@@ -243,8 +241,6 @@ def lane_fill_poly(binary_warped,undist,center_fit,left_fit,right_fit, inverse_p
     left_fitx = get_val(ploty,left_fit)
     right_fitx = get_val(ploty,right_fit)
     center_fitx = get_val(ploty,center_fit)
-    # center_y = (lefty[:len(righty)]+righty)/2
-    # print(center_x)
     # Create an image to draw the lines on
     warp_zero = np.zeros_like(binary_warped).astype(np.uint8)
     color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
@@ -254,7 +250,6 @@ def lane_fill_poly(binary_warped,undist,center_fit,left_fit,right_fit, inverse_p
     pts_right = np.array([np.flipud(np.transpose(np.vstack([right_fitx, ploty])))])
     pts_center = np.array([np.transpose(np.vstack([center_fitx, ploty]))])
     pts = np.hstack((pts_left, pts_right))
-    # print(pts)
     # Draw the lane 
     cv2.fillPoly(color_warp, np.int_([pts]), (0,255, 0))
     cv2.fillPoly(center_color_warp, np.int_([pts_center]),(0,0,255))
@@ -266,6 +261,7 @@ def lane_fill_poly(binary_warped,undist,center_fit,left_fit,right_fit, inverse_p
     result = cv2.addWeighted(result,1,center_line,0.7,0.3)
     return result, center_line
 
+############################## calcul steer angle #############################
 def find_point_center(center_line):
     roi = int(center_line.shape[0]*(7/9))+10
     for y in range(roi,center_line.shape[0]):
@@ -284,15 +280,15 @@ def errorAngle(center_line):
         return 0
     if dsty == carPosy:
         if dstx < carPosx:
-            return -90
+            return -45
         else:
-            return 90
+            return 45
     pi = math.acos(-1.0)
     dx = dstx - carPosx
     dy = carPosy - dsty
     if dx < 0: 
         angle = (math.atan(-dx / dy) * -180 / pi)/2.5
-        if angle >= 25 or angle <= -25: # maybe must turn 90
+        if angle >= 28 or angle <= -28: # maybe must turn 90
             if angle > 0:
                 return 45
             return -45
@@ -312,9 +308,9 @@ def calcul_speed(steer_angle):
         return 0
     if steer_angle >= 4 or steer_angle <= -4:
         if steer_angle > 0:
-            return 70 - (70/max_angle)*steer_angle
+            return max_speed - (max_speed/max_angle)*steer_angle
         else:
-            return 70 + (70/max_angle)*steer_angle 
+            return max_speed + (max_speed/max_angle)*steer_angle 
     elif steer_angle >= 15 or steer_angle <= -15:
         if steer_angle > 0:
             return 40 - (40/max_angle)*steer_angle
@@ -328,3 +324,21 @@ def calcul_speed(steer_angle):
     # if steer_angle >=0:
     #     return max_speed - (max_speed/max_angle)*steer_angle
     return max_speed 
+################## find line avaiable ######################
+def line_processing(image):
+   binary_image =  binary_pipeline(image)
+   bird_view, inverse_perspective_transform =  warp_image(binary_image)
+   left_fit, right_fit = track_lanes_initialize(bird_view)
+   return left_fit, right_fit,bird_view, inverse_perspective_transform
+################## Draw lane avaiable #######################
+def draw_lane(image, bird_view, left_fit, right_fit, inverse_perspective_transform):
+    left_fit, right_fit = check_fit_duplication(left_fit,right_fit)
+    center_fit, left_fit, right_fit = find_center_line_and_update_fit(image,left_fit,right_fit) # update left, right line
+    colored_lane, center_line = lane_fill_poly(bird_view,image,center_fit,left_fit,right_fit, inverse_perspective_transform)
+    cv2.imshow("lane",colored_lane)
+    return center_line
+def get_speed_angle(center_line):
+#    # calculate speed and angle
+   steer_angle =  errorAngle(center_line)
+   speed_current = calcul_speed(steer_angle)
+   return speed_current, steer_angle

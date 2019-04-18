@@ -1,28 +1,28 @@
 import numpy as np 
 import cv2
 from keras.models import load_model
-model = load_model('model.h5')
-def predict_obj(image):
-    traffic_sign = np.asarray(image,dtype=int)
+import tensorflow as tf
+model = load_model('model_autocar.h5')
+graph = tf.get_default_graph()
+def predict_obj(image): # 0 is not turn left, 1 is not turn right, 2 is straight
+    traffic_sign = np.asarray(image)
     traffic_sign = cv2.resize(traffic_sign, (32,32))
     # convert to Gray
     traffic_sign = cv2.cvtColor(traffic_sign, cv2.COLOR_BGR2GRAY)
     traffic_sign = cv2.equalizeHist(traffic_sign)
     traffic_sign = traffic_sign/225
-
-    cv2.imshow('traffic_sign', traffic_sign)
     traffic_sign = traffic_sign.reshape(1,32,32,1)
-    prediction = model.predict_classes(traffic_sign)
+    #perdict
+    with graph.as_default():
+        prediction = model.predict_classes(traffic_sign)
     return prediction[0]
-    
-    # return 0
 
 def binary_cvt(image):
     # Blue
-    # lower_b = np.array([0,140,200])
-    # upper_b = np.array([2,150,255])
-    lower_b = np.array([0,50,200])
-    upper_b = np.array([20,70,255])
+    lower_b = np.array([0,140,200])
+    upper_b = np.array([2,150,255])
+    # lower_b = np.array([0,50,200])
+    # upper_b = np.array([20,70,255])
     # Red
     lower_r = np.array([190,15,15])
     upper_r = np.array([210,40,40])
@@ -39,18 +39,18 @@ def binary_cvt(image):
 
 def dectect_obj(image):
     binary_image = binary_cvt(image)
-    # roi = binary_image[:int(binary_image.shape[0]/2)-20,:]   
-    roi = binary_image
+    roi = binary_image[:int(binary_image.shape[0]/2)-20,:]   
+    # roi = binary_image
     if not np.any(roi):
         return None
     nonzero = roi.nonzero()
     nonzeroy = np.array(nonzero[0])
     nonzerox = np.array(nonzero[1])
-    nwindows = 25
+    nwindows = 9
     window_width = np.int(roi.shape[1]/nwindows)
     win_y_low = 0
     win_y_high = roi.shape[0]
-    minpix = 30
+    minpix = 100
     good_window = []
     for window in range(nwindows):
         win_x_low = int(roi.shape[1] - (window+1)*window_width)
@@ -62,10 +62,6 @@ def dectect_obj(image):
         return None
     x_low = int(roi.shape[1] - (good_window[len(good_window)-1]+1)*window_width)
     x_high = int(roi.shape[1] - good_window[0]*window_width)
-    # histogram_x = np.sum(roi[:,x_low:x_high], axis=0)
-    # histogram_y = np.sum(roi[win_y_low:win_x_high,:], axis=1)
-    # x_mid = np.argmax(histogram_x)
-    # y_mid = np.argmax(histogram_y)
     roi[:,0:x_low] = 0
     roi[:,x_high:roi.shape[1]-1] = 0
     #with opencv version >= 4.0
@@ -94,18 +90,23 @@ def dectect_obj(image):
     dst_x  = max_x_index - min_x_index
     dst_y = max_y_index - min_y_index
     if abs(dst_x - dst_y) > 10:
-        return None 
-    point_1 = (min_x_index,min_y_index)
-    point_2 = (max_x_index,max_y_index)
-    # cv2.rectangle(image,point_1,point_2,(0,255,0),3)
-    # cv2.imshow('image',image)
-    # print(max_x)
+        return None  
+    # cv2.rectangle(image,(min_x_index,min_y_index),(max_x_index,max_y_index),(0,255,0),3)
     traffic_sign = image[min_y_index:max_y_index, min_x_index: max_x_index,:]
-    # print(traffic_sign)
+    if traffic_sign.shape[0] < 32 or traffic_sign.shape[1] < 32:
+        return None
     return traffic_sign
+
+def traffic_sign_processing(image):
+   traffic_sign = dectect_obj(image)
+   if traffic_sign is None:
+      return -1
+   cv2.imshow('traffic_sign_image',traffic_sign)
+   predict = predict_obj(traffic_sign)
+   return predict
 # if __name__ == "__main__":
-#     # image = cv2.imread('camretrai.jpg')
-#     image = cv2.imread('camrephai.jpg')
+#     image = cv2.imread('camretrai.jpg')
+#     # image = cv2.imread('turnright.jpg')
 #     # image = cv2.imread('turnleft.jpg')
 #     traffic_sign = dectect_obj(image)
 #     cv2.imshow('image',traffic_sign)
