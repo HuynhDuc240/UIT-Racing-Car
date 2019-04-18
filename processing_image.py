@@ -95,9 +95,9 @@ def check_lane_inds(left_lane_inds, right_lane_inds):
         if countleft < countright:
             return left_lane_inds, []
         return [], right_lane_inds
-    if countleft >= 5:
+    if countleft >= 6:
         return [], right_lane_inds
-    if countright >= 5:
+    if countright >= 6:
         return left_lane_inds, []
     return left_lane_inds,right_lane_inds
 
@@ -306,7 +306,7 @@ def errorAngle(center_line):
     return angle
 
 def calcul_speed(steer_angle):
-    max_speed = 60
+    max_speed = 70
     max_angle = 40
     if steer_angle == -45 or steer_angle == 45:
         return 0
