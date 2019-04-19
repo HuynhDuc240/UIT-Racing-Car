@@ -1,6 +1,7 @@
+import numpy as np 
+import cv2
 from keras.models import load_model
 import tensorflow as tf
-from processing_image import *
 model = load_model('model_autocar.h5')
 graph = tf.get_default_graph()
 def predict_obj(image): # 0 is not turn left, 1 is not turn right, 2 is straight
@@ -37,35 +38,36 @@ def binary_cvt(image):
 
 
 def dectect_obj(image):
-    roi = image[:int(image.shape[0]/2)-20,:]  
-    binary_image = binary_cvt(roi)
-    if not np.any(binary_image):
+    binary_image = binary_cvt(image)
+    roi = binary_image[:int(binary_image.shape[0]/2)-20,:]   
+    # roi = binary_image
+    if not np.any(roi):
         return None
-    nonzero = binary_image.nonzero()
+    nonzero = roi.nonzero()
     nonzeroy = np.array(nonzero[0])
     nonzerox = np.array(nonzero[1])
     nwindows = 9
-    window_width = np.int(binary_image.shape[1]/nwindows)
+    window_width = np.int(roi.shape[1]/nwindows)
     win_y_low = 0
-    win_y_high = binary_image.shape[0]
-    minpix = 200
+    win_y_high = roi.shape[0]
+    minpix = 100
     good_window = []
     for window in range(nwindows):
-        win_x_low = int(binary_image.shape[1] - (window+1)*window_width)
-        win_x_high = int(binary_image.shape[1] - window*window_width)
+        win_x_low = int(roi.shape[1] - (window+1)*window_width)
+        win_x_high = int(roi.shape[1] - window*window_width)
         good_ts_inds = ((nonzeroy >= win_y_low) & (nonzeroy < win_y_high) & (nonzerox >= win_x_low) & (nonzerox < win_x_high)).nonzero()[0]
         if len(good_ts_inds) > minpix:
             good_window.append(window)
     if len(good_window) == 0:
         return None
-    x_low = int(binary_image.shape[1] - (good_window[len(good_window)-1]+1)*window_width)
-    x_high = int(binary_image.shape[1] - good_window[0]*window_width)
-    binary_image[:,0:x_low] = 0
-    binary_image[:,x_high:binary_image.shape[1]-1] = 0
+    x_low = int(roi.shape[1] - (good_window[len(good_window)-1]+1)*window_width)
+    x_high = int(roi.shape[1] - good_window[0]*window_width)
+    roi[:,0:x_low] = 0
+    roi[:,x_high:roi.shape[1]-1] = 0
     #with opencv version >= 4.0
-    contours,_ = cv2.findContours(binary_image,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    contours,_ = cv2.findContours(roi,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
     # other opencv version
-    # _,contours,_ = cv2.findContours(binary_image,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    # _,contours,_ = cv2.findContours(roi,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
     # cv2.drawContours(image, contours, -1, (0,255,0), 3)
     list_corner = np.array([[-1,-1]])
     for i in range(len(contours)):
@@ -94,29 +96,14 @@ def dectect_obj(image):
     if traffic_sign.shape[0] < 32 or traffic_sign.shape[1] < 32:
         return None
     return traffic_sign
-def check_for_time_steer(image):
-    image_copy = image[int(image.shape[0]*(7/9)):,:,:]
-    print('mode checking steer for have traffic sign is turning on')
-    point_left = (0,image_copy.shape[0]-35)
-    point_right = (image_copy.shape[1]-1,image_copy.shape[0]-35)
-    lane_image = hsv_select(image_copy)
-    lane_shadow = lane_in_shadow(image_copy)
-    lane = cv2.bitwise_or(lane_image,lane_shadow)
-    lane = cv2.GaussianBlur(lane,(7,7),0)
-    # cv2.imshow('a',lane)
-    # cv2.circle(image_copy,point_left,1,(0,0,255),8)
-    # cv2.circle(image_copy,point_right,1,(0,0,255),8)
-    if lane[point_left[1],point_left[0]] == 255 and lane[point_right[1],point_right[0]] == 255:
-        return True
-    return False
-    
-# def traffic_sign_processing(image):
-#    traffic_sign = dectect_obj(image)
-#    if traffic_sign is None:
-#       return -1
-#    cv2.imshow('traffic_sign_image',traffic_sign)
-#    predict = predict_obj(traffic_sign)
-#    return predict
+
+def traffic_sign_processing(image):
+   traffic_sign = dectect_obj(image)
+   if traffic_sign is None:
+      return -1
+   cv2.imshow('traffic_sign_image',traffic_sign)
+   predict = predict_obj(traffic_sign)
+   return predict
 # if __name__ == "__main__":
 #     image = cv2.imread('camretrai.jpg')
 #     # image = cv2.imread('turnright.jpg')

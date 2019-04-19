@@ -4,7 +4,9 @@ import sys
 import json
 import threading
 import queue
+import numpy as np
 import time
+from processing_image import *
 from detect_traffic_sign import *
 rspeed = 0
 speed = 0
@@ -14,11 +16,10 @@ path = 'theFxUITCar_Data/Snapshots/fx_UIT_Car.png'
 port = 9999
 ip = str(sys.argv[1])
 
-# flag for traffic sign
+# flag for turn left or right
+flag_for_steer = [False,-1] 
 pass_loop_time = 0
-flag_ts = False
-status_ts = [0,0,""]
-perdict = -1
+old_status = [0,0]
 ## Function Parse to Json String
 def jsonToString(speed, angle):
    jsonObject = {
@@ -30,47 +31,58 @@ def jsonToString(speed, angle):
    # print(jsonString)
    return jsonString
 
+
 def processing(image):
-   global flag_ts
-   global status_ts
+   global old_status
    global pass_loop_time
-   global predict
+   global flag_for_steer
+   global Max_speed
+   if flag_for_steer[0]:
+      print("Traffic Sign avaiable")
+      if flag_for_steer[1] == 0 or flag_for_steer[1] == 1:
+         Max_speed = 10
+   else:
+      Max_speed = 100
    while pass_loop_time > 0:
       pass_loop_time -= 1
-      print(status_ts[2])
-      cv2.imshow('lane', image)
-      return status_ts[0], status_ts[1]
-   ########### TRAFFIC SIGN ###########
-   image_cp_ts = np.copy(image)
-   traffic_sign = dectect_obj(image_cp_ts)
-   if traffic_sign is not None:
-      predict = predict_obj(traffic_sign)
-      flag_ts = True
-      cv2.imshow('traffic_sign',traffic_sign)
-   if flag_ts:
-      # 0 is not turn left, 1 is not turn right, 2 is straight, -1 is None
-      if predict == 0:
-         status_ts = [0,45,"TURN RIGHT"]
-      elif predict == 1:
-         status_ts = [0,-45,"TURN LEFT"]
-      else:
-         status_ts = [70,0,"GO STRAIGHT"]
-      if check_for_time_steer(image_cp_ts):
-         flag_ts = False
-         pass_loop_time = 50
-         return status_ts[0],status_ts[1]
-   ############# LINES ####################
-   binary_image =  binary_pipeline(image)
-   bird_view, inverse_perspective_transform =  warp_image(binary_image)
-   left_fit, right_fit = track_lanes_initialize(bird_view)
-   left_fit, right_fit = check_fit_duplication(left_fit,right_fit)
-   center_fit, left_fit, right_fit = find_center_line_and_update_fit(image,left_fit,right_fit) # update left, right line
-   colored_lane, center_line = lane_fill_poly(bird_view,image,center_fit,left_fit,right_fit, inverse_perspective_transform)
-   cv2.imshow("lane",colored_lane)
-   # cv2.imshow("image_cp_ts",image_cp_ts)
+      cv2.imshow('lane',image)
+      cv2.waitKey(1)
+      return old_status[0], old_status[1]
+   image_copy = np.copy(image)
+   ##### predic traffic sign avaiable 
+   # 0 is not turn left, 1 is not turn right, 2 is straight, -1 is None
+   predict = traffic_sign_processing(image_copy)
+   if predict == 0: # Turn Right
+      flag_for_steer = [True, 0]
+      old_status = [0, 45]
+   elif predict == 1: # Turn Left
+      flag_for_steer = [True, 1]
+      old_status = [0,-45]
+   elif predict == 2:
+      flag_for_steer = [True, 2]
+      old_status = [70, 0]
+   left_fit, right_fit, bird_view, ipt = line_processing(image_copy)
+   if len(left_fit) == 0 or len(right_fit) == 0: # missing 2 line
+      if flag_for_steer[0]: # before have traffic sign avaiable after that
+         if flag_for_steer[1] == 0:
+            print("Turn RIGHT with traffic sign aviable")
+             ############ change for testing old value[0,45]
+         elif flag_for_steer[1] == 1:
+            print("Turn LEFT  with traffic sign aviable")
+         elif flag_for_steer[1] == 2:
+            print("GO STRAIGHT")
+         flag_for_steer[0] = False
+         print("Traffic Sign unavaiable")
+         pass_loop_time = 70
+         cv2.imshow('lane',image_copy)
+         return old_status[0], old_status[1]
+   center_line = draw_lane(image_copy,bird_view,left_fit,right_fit,ipt)
    speed_current, steer_angle = get_speed_angle(center_line)
-   if flag_ts and (steer_angle >= 15 or steer_angle <= -15):
-      return status_ts[0], status_ts[1]
+   ######## bug ####################
+   if steer_angle == 45 or steer_angle == -45:
+      if flag_for_steer[0]: # before have traffic sign avaiable after that
+         return old_status[0], old_status[1]
+   cv2.waitKey(1)
    return int(speed_current), int(steer_angle)
 
 class socketThread (threading.Thread):
@@ -114,7 +126,6 @@ class processThread (threading.Thread):
             # print('speed now is : {0}', rspeed)
             if img is not None:
                speed, angle = processing(img)
-               cv2.waitKey(1)
                if speed > Max_speed:
                   speed = Max_speed
                print(speed, angle,rspeed)

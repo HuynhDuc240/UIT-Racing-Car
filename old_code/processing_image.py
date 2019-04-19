@@ -27,7 +27,7 @@ def binary_pipeline(img):
     return binary
 
 
-def hsv_select(img, lower=np.array([10, 0, 0]), upper =np.array([180, 50,210])):
+def hsv_select(img, lower=np.array([10, 0, 0]), upper =np.array([180, 50,150])):
     hsv_img = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     mask = cv2.inRange(hsv_img, lower, upper)
     # cv2.imshow("mask", hsv_img)
@@ -175,20 +175,18 @@ def check_fit_duplication(left_fit, right_fit):
     return left_fit, right_fit
 
 
-#### UPDATE #####
+
 def get_point_in_lane(image):
     warp,_ = warp_image(image)
     lane_image = hsv_select(warp)
     lane_shadow = lane_in_shadow(warp)
     lane = cv2.bitwise_or(lane_image,lane_shadow)
     # cv2.imshow('lane_image',lane)
-    histogram_x = np.sum(lane[:,:], axis=0)
-    histogram_y = np.sum(lane[:,:], axis=1)
-    lane_x = np.argmax(histogram_x)
-    lane_y = np.argmax(histogram_y)
-    for y in range(lane_y,0,-1):
-        if lane[y][lane_x] == 255:
-            return [y, lane_x]
+    histogram = np.sum(lane[int(lane.shape[0]/2):,:], axis=0)
+    lane_x = np.argmax(histogram)
+    for y in range(lane.shape[0]-1,0,-1):
+        if lane[y-10][lane_x] == 255:
+            return [y-10, lane_x]
     return 0,0
 
 def find_center_line_for_missing_one_line(image,left_fit,right_fit):
@@ -327,18 +325,18 @@ def calcul_speed(steer_angle):
     #     return max_speed - (max_speed/max_angle)*steer_angle
     return max_speed 
 ################## find line avaiable ######################
-# def line_processing(image):
-#    binary_image =  binary_pipeline(image)
-#    bird_view, inverse_perspective_transform =  warp_image(binary_image)
-#    left_fit, right_fit = track_lanes_initialize(bird_view)
-#    return left_fit, right_fit,bird_view, inverse_perspective_transform
+def line_processing(image):
+   binary_image =  binary_pipeline(image)
+   bird_view, inverse_perspective_transform =  warp_image(binary_image)
+   left_fit, right_fit = track_lanes_initialize(bird_view)
+   return left_fit, right_fit,bird_view, inverse_perspective_transform
 ################## Draw lane avaiable #######################
-# def draw_lane(image, bird_view, left_fit, right_fit, inverse_perspective_transform):
-#     left_fit, right_fit = check_fit_duplication(left_fit,right_fit)
-#     center_fit, left_fit, right_fit = find_center_line_and_update_fit(image,left_fit,right_fit) # update left, right line
-#     colored_lane, center_line = lane_fill_poly(bird_view,image,center_fit,left_fit,right_fit, inverse_perspective_transform)
-#     cv2.imshow("lane",colored_lane)
-#     return center_line
+def draw_lane(image, bird_view, left_fit, right_fit, inverse_perspective_transform):
+    left_fit, right_fit = check_fit_duplication(left_fit,right_fit)
+    center_fit, left_fit, right_fit = find_center_line_and_update_fit(image,left_fit,right_fit) # update left, right line
+    colored_lane, center_line = lane_fill_poly(bird_view,image,center_fit,left_fit,right_fit, inverse_perspective_transform)
+    cv2.imshow("lane",colored_lane)
+    return center_line
 def get_speed_angle(center_line):
 #    # calculate speed and angle
    steer_angle =  errorAngle(center_line)
