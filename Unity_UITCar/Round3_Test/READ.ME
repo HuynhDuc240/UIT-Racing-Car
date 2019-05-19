@@ -1,0 +1,18 @@
+NOTE:
+* If you are using opencv with version < 4.0:
+	- Open file detect_traffic_sign.py.
+	- Search keywords "other opencv version". You can see:
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+    	# with opencv version >= 4.0
+    	contours,_ = cv2.findContours(binary_image,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    	# other opencv version
+    	# _,contours,_ = cv2.findContours(binary_image,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+	- Turn on the line below and turn off the line above
+
+
+
+NOTE: 
+Librarys are used:
+	- Tensorflow
+	- Keras
